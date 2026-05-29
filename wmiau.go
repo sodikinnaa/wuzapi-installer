@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +42,25 @@ type MyClient struct {
 	subscriptions  []string
 	db             *sqlx.DB
 	s              *server
+}
+
+// safeGo runs fn in a new goroutine with a defer recover so a panic inside
+// fire-and-forget side-effects (webhook delivery, MQ push) cannot crash
+// the whole process. Losing one delivery is preferable to taking wuzapi
+// down for every connected user.
+func safeGo(name string, fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().
+					Str("goroutine", name).
+					Interface("panic", r).
+					Str("stack", string(debug.Stack())).
+					Msg("panic recovered in goroutine")
+			}
+		}()
+		fn()
+	}()
 }
 
 // ensureS3ClientForUser loads S3 config from DB and initializes client if not already present (lazy init for reconnect-after-restart)
@@ -92,17 +112,9 @@ func sendToUserWebHookWithHmac(webhookurl string, path string, jsonData []byte, 
 		log.Info().Str("url", webhookurl).Msg("Calling user webhook")
 
 		if path == "" {
-			go callHookWithHmac(webhookurl, data, userID, encryptedHmacKey)
+			safeGo("callHookWithHmac", func() { callHookWithHmac(webhookurl, data, userID, encryptedHmacKey) })
 		} else {
-			// Create a channel to capture the error from the goroutine
-			errChan := make(chan error, 1)
-			go func() {
-				err := callHookFileWithHmac(webhookurl, data, userID, path, encryptedHmacKey)
-				errChan <- err
-			}()
-
-			// Optionally handle the error from the channel (if needed)
-			if err := <-errChan; err != nil {
+			if err := callHookFileWithHmac(webhookurl, data, userID, path, encryptedHmacKey); err != nil {
 				log.Error().Err(err).Msg("Error calling hook file")
 			}
 		}
@@ -213,9 +225,9 @@ func sendEventWithWebHook(mycli *MyClient, postmap map[string]interface{}, path 
 	sendToUserWebHookWithHmac(webhookurl, path, jsonData, mycli.userID, mycli.token, encryptedHmacKey)
 
 	// Get global webhook if configured
-	go sendToGlobalWebHook(jsonData, mycli.token, mycli.userID)
+	safeGo("sendToGlobalWebHook", func() { sendToGlobalWebHook(jsonData, mycli.token, mycli.userID) })
 
-	go sendToGlobalRabbit(jsonData, mycli.token, mycli.userID)
+	safeGo("sendToGlobalRabbit", func() { sendToGlobalRabbit(jsonData, mycli.token, mycli.userID) })
 }
 
 func checkIfSubscribedToEvent(subscribedEvents []string, eventType string, userId string) bool {

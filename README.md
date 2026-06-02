@@ -472,27 +472,27 @@ Check the [API Reference](https://github.com/asternic/wuzapi/blob/main/API.md)
     </a>
   </td>
 <td align="center">
-    <a href="https://github.com/AlanMartines">
-      <img src="https://avatars.githubusercontent.com/u/10979090?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>AlanMartines</b></sub>
+    <a href="https://github.com/zennnez">
+      <img src="https://avatars.githubusercontent.com/u/3524740?v=4" width="100px;" style="border-radius:50%;"/><br />
+      <sub><b>zennnez</b></sub>
     </a>
   </td>
 <td align="center">
-    <a href="https://github.com/DwiRizqiH">
-      <img src="https://avatars.githubusercontent.com/u/69355492?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>DwiRizqiH</b></sub>
+    <a href="https://github.com/murilo-koko">
+      <img src="https://avatars.githubusercontent.com/u/223512888?v=4" width="100px;" style="border-radius:50%;"/><br />
+      <sub><b>murilo-koko</b></sub>
     </a>
   </td>
 <td align="center">
-    <a href="https://github.com/elohmeier">
-      <img src="https://avatars.githubusercontent.com/u/2536303?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>elohmeier</b></sub>
+    <a href="https://github.com/Jwenqiang">
+      <img src="https://avatars.githubusercontent.com/u/20280001?v=4" width="100px;" style="border-radius:50%;"/><br />
+      <sub><b>Jwenqiang</b></sub>
     </a>
   </td>
 <td align="center">
-    <a href="https://github.com/fadlee">
-      <img src="https://avatars.githubusercontent.com/u/334797?v=4" width="100px;" style="border-radius:50%;"/><br />
-      <sub><b>fadlee</b></sub>
+    <a href="https://github.com/cadao7">
+      <img src="https://avatars.githubusercontent.com/u/306330?v=4" width="100px;" style="border-radius:50%;"/><br />
+      <sub><b>cadao7</b></sub>
     </a>
   </td>
 </tr></table>

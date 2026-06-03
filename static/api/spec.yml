@@ -371,6 +371,14 @@ paths:
             application/json:
               schema:
                 example: { "code": 200, "data": { "Details": "Disconnected" }, "success": true }
+      parameters:
+        - name: clear
+          in: query
+          required: false
+          description: If true, also clears the user's event subscriptions on disconnect. Defaults to false, which preserves them.
+          schema:
+            type: boolean
+            example: false
   /session/logout:
     post:
       tags:

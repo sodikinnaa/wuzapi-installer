@@ -374,9 +374,15 @@ Response:
 Disconnects from Whatsapp servers, keeping the session active. This means that if you /session/connect again, it will
 reuse the session and won't require a QR code rescan.
 
+Event subscriptions are **preserved by default**. Pass `clear=true` to also reset them on disconnect.
+
 Endpoint: _/session/disconnect_
 
 Method: **POST**
+
+Query parameters:
+
+* `clear` (optional, boolean): if `true`, clears the user's event subscriptions on disconnect. Defaults to `false` (subscriptions preserved).
 
 
 ```

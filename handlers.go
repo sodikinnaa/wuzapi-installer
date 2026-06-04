@@ -6951,6 +6951,113 @@ func (s *server) GetUserLID() http.HandlerFunc {
 	}
 }
 
+// privacySettingValues maps each settable privacy setting to the values WhatsApp
+// accepts for it, using the matrix documented in whatsmeow's types. Used to reject
+// invalid input before it reaches the server.
+//
+// This is deliberately the subset that whatsmeow's (*Client).SetPrivacySetting
+// round-trips: its switch updates the returned/cached PrivacySettings only for
+// these seven names. The protocol also defines "messages", "defense" and
+// "stickers" (see types.PrivacySettingType), but whatsmeow's setter has no case
+// for them, so a change would be sent to the server yet leave the response and
+// cache stale. We expose only what round-trips correctly; revisit if whatsmeow
+// adds those cases.
+var privacySettingValues = map[types.PrivacySettingType][]types.PrivacySetting{
+	types.PrivacySettingTypeGroupAdd:     {types.PrivacySettingAll, types.PrivacySettingContacts, types.PrivacySettingContactBlacklist, types.PrivacySettingNone},
+	types.PrivacySettingTypeLastSeen:     {types.PrivacySettingAll, types.PrivacySettingContacts, types.PrivacySettingContactBlacklist, types.PrivacySettingNone},
+	types.PrivacySettingTypeStatus:       {types.PrivacySettingAll, types.PrivacySettingContacts, types.PrivacySettingContactBlacklist, types.PrivacySettingNone},
+	types.PrivacySettingTypeProfile:      {types.PrivacySettingAll, types.PrivacySettingContacts, types.PrivacySettingContactBlacklist, types.PrivacySettingNone},
+	types.PrivacySettingTypeReadReceipts: {types.PrivacySettingAll, types.PrivacySettingNone},
+	types.PrivacySettingTypeOnline:       {types.PrivacySettingAll, types.PrivacySettingMatchLastSeen},
+	types.PrivacySettingTypeCallAdd:      {types.PrivacySettingAll, types.PrivacySettingKnown},
+}
+
+// validatePrivacySetting reports whether name is a supported privacy setting and
+// value is one of the values WhatsApp accepts for it.
+func validatePrivacySetting(name, value string) error {
+	allowed, ok := privacySettingValues[types.PrivacySettingType(name)]
+	if !ok {
+		return fmt.Errorf("invalid privacy setting name %q", name)
+	}
+	for _, v := range allowed {
+		if types.PrivacySetting(value) == v {
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid value %q for privacy setting %q", value, name)
+}
+
+// GetPrivacySettings returns the account's current privacy settings.
+func (s *server) GetPrivacySettings() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		txtid := r.Context().Value("userinfo").(Values).Get("Id")
+		client := clientManager.GetWhatsmeowClient(txtid)
+		if client == nil {
+			s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+
+		settings, err := client.TryFetchPrivacySettings(ctx, false)
+		if err != nil {
+			s.Respond(w, r, http.StatusInternalServerError, fmt.Errorf("failed to get privacy settings: %w", err))
+			return
+		}
+
+		responseJson, err := json.Marshal(settings)
+		if err != nil {
+			s.Respond(w, r, http.StatusInternalServerError, err)
+		} else {
+			s.Respond(w, r, http.StatusOK, string(responseJson))
+		}
+	}
+}
+
+// SetPrivacySetting updates a single privacy setting (e.g. last seen, profile photo,
+// read receipts). Pass {"Name": "...", "Value": "..."}.
+func (s *server) SetPrivacySetting() http.HandlerFunc {
+	type privacyRequest struct {
+		Name  string `json:"Name"`
+		Value string `json:"Value"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		txtid := r.Context().Value("userinfo").(Values).Get("Id")
+		client := clientManager.GetWhatsmeowClient(txtid)
+		if client == nil {
+			s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
+			return
+		}
+
+		var t privacyRequest
+		if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("could not decode Payload"))
+			return
+		}
+		if err := validatePrivacySetting(t.Name, t.Value); err != nil {
+			s.Respond(w, r, http.StatusBadRequest, err)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+
+		settings, err := client.SetPrivacySetting(ctx, types.PrivacySettingType(t.Name), types.PrivacySetting(t.Value))
+		if err != nil {
+			s.Respond(w, r, http.StatusInternalServerError, fmt.Errorf("failed to set privacy setting: %w", err))
+			return
+		}
+
+		responseJson, err := json.Marshal(settings)
+		if err != nil {
+			s.Respond(w, r, http.StatusInternalServerError, err)
+		} else {
+			s.Respond(w, r, http.StatusOK, string(responseJson))
+		}
+	}
+}
+
 // RequestUnavailableMessage requests a copy of a message that couldn't be decrypted
 func (s *server) RequestUnavailableMessage() http.HandlerFunc {
 

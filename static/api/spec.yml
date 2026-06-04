@@ -946,6 +946,48 @@ paths:
           description: Invalid or missing token
         404:
           description: User not found
+  /user/privacy:
+    get:
+      tags:
+        - User
+      summary: Get privacy settings
+      description: Returns the account's current privacy settings (last seen, profile photo, status, read receipts, online, groups, calls).
+      security:
+        - ApiKeyAuth: []
+      responses:
+        200:
+          description: Current privacy settings
+          content:
+            application/json:
+              schema:
+                example: { "code": 200, "data": { "GroupAdd": "contacts", "LastSeen": "all", "Status": "contacts", "Profile": "all", "ReadReceipts": "all", "CallAdd": "all", "Online": "all", "Messages": "all", "Defense": "off", "Stickers": "contacts" }, "success": true }
+    post:
+      tags:
+        - User
+      summary: Set a privacy setting
+      description: |
+        Updates a single privacy setting. Valid Name/Value combinations:
+        <br>`groupadd`, `last`, `status`, `profile`: `all`, `contacts`, `contact_blacklist`, `none`
+        <br>`readreceipts`: `all`, `none`
+        <br>`online`: `all`, `match_last_seen`
+        <br>`calladd`: `all`, `known`
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              example: { "Name": "last", "Value": "contacts" }
+      responses:
+        200:
+          description: Updated privacy settings
+          content:
+            application/json:
+              schema:
+                example: { "code": 200, "data": { "LastSeen": "contacts" }, "success": true }
+        400:
+          description: Invalid privacy setting name or value
   /chat/delete:
     post:
       tags:

@@ -3433,6 +3433,64 @@ func (s *server) SendPresence() http.HandlerFunc {
 	}
 }
 
+// Subscribes to a contact's presence (online/offline + last seen).
+// After subscribing, the configured webhook receives "Presence" events for that
+// contact (with state and, when offline, a last_seen unix timestamp). Requires the
+// session to be available/online (wuzapi sends available presence on connect).
+func (s *server) SubscribePresence() http.HandlerFunc {
+
+	type subscribePresenceStruct struct {
+		Phone string
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		txtid := r.Context().Value("userinfo").(Values).Get("Id")
+
+		if clientManager.GetWhatsmeowClient(txtid) == nil {
+			s.Respond(w, r, http.StatusInternalServerError, errors.New("no session"))
+			return
+		}
+
+		decoder := json.NewDecoder(r.Body)
+		var t subscribePresenceStruct
+		err := decoder.Decode(&t)
+		if err != nil {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("could not decode Payload"))
+			return
+		}
+
+		if len(t.Phone) < 1 {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("missing Phone in Payload"))
+			return
+		}
+
+		jid, ok := parseJID(t.Phone)
+		if !ok {
+			s.Respond(w, r, http.StatusBadRequest, errors.New("could not parse Phone"))
+			return
+		}
+
+		err = clientManager.GetWhatsmeowClient(txtid).SubscribePresence(context.Background(), jid)
+		if err != nil {
+			s.Respond(w, r, http.StatusInternalServerError, errors.New("failure subscribing to presence"))
+			return
+		}
+
+		log.Info().Str("jid", jid.String()).Msg("Subscribed to presence")
+
+		response := map[string]interface{}{"Details": "Presence subscription requested successfuly"}
+		responseJson, err := json.Marshal(response)
+		if err != nil {
+			s.Respond(w, r, http.StatusInternalServerError, err)
+		} else {
+			s.Respond(w, r, http.StatusOK, string(responseJson))
+		}
+		return
+
+	}
+}
+
 // Gets avatar info for user
 func (s *server) GetAvatar() http.HandlerFunc {
 

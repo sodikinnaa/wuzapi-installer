@@ -1146,11 +1146,13 @@ func (mycli *MyClient) myEventHandler(rawEvt interface{}) {
 	case *events.Presence:
 		postmap["type"] = "Presence"
 		dowebhook = 1
+		postmap["from"] = evt.From.String()
 		if evt.Unavailable {
 			postmap["state"] = "offline"
 			if evt.LastSeen.IsZero() {
 				log.Info().Str("from", evt.From.String()).Msg("User is now offline")
 			} else {
+				postmap["last_seen"] = evt.LastSeen.Unix()
 				log.Info().Str("from", evt.From.String()).Str("lastSeen", fmt.Sprintf("%v", evt.LastSeen)).Msg("User is now offline")
 			}
 		} else {

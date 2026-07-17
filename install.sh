@@ -16,26 +16,24 @@ echo -e "${BLUE}================================================================
 echo -e "${BLUE}                    WUZAPI INSTALLER SCRIPT                      ${NC}"
 echo -e "${BLUE}=================================================================${NC}"
 
-# 1. Check if running as root
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}Error: This script must be run as root (or with sudo).${NC}"
-    exit 1
-fi
+# 1. Detect System OS and Architecture
+echo -e "${YELLOW}Step 1: Detecting system OS and architecture...${NC}"
+OS_LOWER=$(uname -s | tr '[:upper:]' '[:lower:]')
+OS="linux"
+EXE_EXT=""
 
-# 2. Install basic dependencies
-echo -e "${YELLOW}Step 1: Installing basic system dependencies...${NC}"
-if command -v apt-get &> /dev/null; then
-    apt-get update -y
-    apt-get install -y curl ca-certificates
-elif command -v yum &> /dev/null; then
-    yum install -y curl ca-certificates
+if [[ "$OS_LOWER" == *"linux"* ]]; then
+    OS="linux"
+elif [[ "$OS_LOWER" == *"darwin"* ]]; then
+    OS="darwin"
+elif [[ "$OS_LOWER" == *"mingw"* || "$OS_LOWER" == *"msys"* || "$OS_LOWER" == *"cygwin"* ]]; then
+    OS="windows"
+    EXE_EXT=".exe"
 else
-    echo -e "${YELLOW}Warning: Please ensure curl and ca-certificates are installed.${NC}"
+    echo -e "${YELLOW}Warning: Unknown OS ($OS_LOWER). Defaulting to Linux.${NC}"
+    OS="linux"
 fi
 
-# 3. Detect Architecture and OS
-echo -e "${YELLOW}Step 2: Detecting system architecture...${NC}"
-OS="linux" # Currently we only support linux via this installer script since it sets up systemd
 ARCH=$(uname -m)
 if [ "$ARCH" = "x86_64" ]; then
     GO_ARCH="amd64"
@@ -47,38 +45,63 @@ else
 fi
 echo -e "Detected platform: $OS-$GO_ARCH"
 
-# 4. Fetch Version from GitHub API
+# Determine Installation Directory
+INSTALL_DIR="/usr/local/wuzapi"
+if [ "$OS" = "windows" ] || [ "$EUID" -ne 0 ]; then
+    # Install in local directory if Windows or not running as root
+    INSTALL_DIR="./wuzapi"
+fi
+mkdir -p "$INSTALL_DIR"
+
+# 2. Install basic dependencies (Linux only)
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
+    echo -e "${YELLOW}Step 2: Installing basic system dependencies...${NC}"
+    if command -v apt-get &> /dev/null; then
+        apt-get update -y
+        apt-get install -y curl ca-certificates
+    elif command -v yum &> /dev/null; then
+        yum install -y curl ca-certificates
+    fi
+fi
+
+# 3. Fetch Version from GitHub API
 echo -e "${YELLOW}Step 3: Determining latest release version...${NC}"
+VERSION=""
 # Try to get latest version from GitHub API
 VERSION=$(curl -s https://api.github.com/repos/sodikinnaa/wuzapi-installer/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
 
 if [ -z "$VERSION" ]; then
-    VERSION="v1.0.8"
+    VERSION="v1.1.2"
     echo -e "Using default fallback version: $VERSION"
 else
     echo -e "Latest release version: $VERSION"
 fi
 
-# 5. Download Precompiled Binary
+# 4. Download Precompiled Binary
 echo -e "${YELLOW}Step 4: Downloading precompiled binary from GitHub...${NC}"
-INSTALL_DIR="/usr/local/wuzapi"
-mkdir -p "$INSTALL_DIR"
 
-# Stop service if running to avoid "Text file busy" error during binary overwrite
-if systemctl list-units --full -all | grep -Fq 'wuzapi.service'; then
-    echo -e "${YELLOW}Stopping WuzAPI service to allow update...${NC}"
-    systemctl stop wuzapi || true
+# Stop systemd service if running (Linux only)
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
+    if systemctl list-units --full -all | grep -Fq 'wuzapi.service'; then
+        echo -e "${YELLOW}Stopping WuzAPI service to allow update...${NC}"
+        systemctl stop wuzapi || true
+    fi
 fi
 
-BINARY_URL="https://github.com/sodikinnaa/wuzapi-installer/releases/download/${VERSION}/wuzapi-${VERSION}-${OS}-${GO_ARCH}"
+BINARY_FILE="wuzapi-${VERSION}-${OS}-${GO_ARCH}"
+if [ "$OS" = "windows" ]; then
+    BINARY_FILE="${BINARY_FILE}.exe"
+fi
+
+BINARY_URL="https://github.com/sodikinnaa/wuzapi-installer/releases/download/${VERSION}/${BINARY_FILE}"
 echo -e "Downloading from: $BINARY_URL"
 
 # Download binary
-curl -L -o "$INSTALL_DIR/wuzapi" "$BINARY_URL"
-chmod +x "$INSTALL_DIR/wuzapi"
-echo -e "${GREEN}Binary downloaded and installed successfully to $INSTALL_DIR/wuzapi.${NC}"
+curl -L -o "$INSTALL_DIR/wuzapi${EXE_EXT}" "$BINARY_URL"
+chmod +x "$INSTALL_DIR/wuzapi${EXE_EXT}"
+echo -e "${GREEN}Binary downloaded and installed successfully to $INSTALL_DIR/wuzapi${EXE_EXT}.${NC}"
 
-# 6. Generate .env file
+# 5. Configure environment variables (.env)
 echo -e "${YELLOW}Step 5: Configuring environment variables (.env)...${NC}"
 ENV_FILE="$INSTALL_DIR/.env"
 
@@ -124,15 +147,16 @@ fi
 
 # Port check warning
 PORT_BUSY=false
-if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || grep -q "$(printf ':%04X' $WUZAPI_PORT)" /proc/net/tcp 2>/dev/null; then
+if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || grep -q "$(printf ':%04X' $WUZAPI_PORT)" /proc/net/tcp 2>/dev/null; do
     PORT_BUSY=true
     echo -e "${RED}Warning: Port $WUZAPI_PORT is already in use by another process!${NC}"
     echo -e "You might need to edit $ENV_FILE and change WUZAPI_PORT to a free port (e.g. 8086) then restart the service."
 fi
 
-# 7. Configure Systemd Service
-echo -e "${YELLOW}Step 6: Creating systemd service...${NC}"
-cat <<EOF > /etc/systemd/system/wuzapi.service
+# 6. Configure Systemd Service (Linux only, running as root)
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
+    echo -e "${YELLOW}Step 6: Creating systemd service...${NC}"
+    cat <<EOF > /etc/systemd/system/wuzapi.service
 [Unit]
 Description=Wuzapi Service
 After=network-online.target
@@ -151,28 +175,52 @@ ExecStart=$INSTALL_DIR/wuzapi
 WantedBy=multi-user.target
 EOF
 
-# Reload and Start Service
-echo -e "${YELLOW}Step 7: Starting WuzAPI service...${NC}"
-systemctl daemon-reload
-systemctl enable wuzapi
-systemctl restart wuzapi
+    # Reload and Start Service
+    echo -e "${YELLOW}Step 7: Starting WuzAPI service...${NC}"
+    systemctl daemon-reload
+    systemctl enable wuzapi
+    systemctl restart wuzapi
+else
+    echo -e "${YELLOW}Step 6 & 7: Skipping systemd service configuration (only supported on Linux as root).${NC}"
+fi
 
 echo -e "${BLUE}=================================================================${NC}"
 echo -e "${GREEN}               WUZAPI INSTALLED SUCCESSFULLY!                    ${NC}"
 echo -e "${BLUE}=================================================================${NC}"
-if [ "$PORT_BUSY" = true ]; then
-    echo -e " Service status: ${RED}Failed to Bind (Port Busy)${NC}"
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
+    if [ "$PORT_BUSY" = true ]; then
+        echo -e " Service status: ${RED}Failed to Bind (Port Busy)${NC}"
+    else
+        echo -e " Service status: ${GREEN}Active & Running (Systemd)${NC}"
+    fi
 else
-    echo -e " Service status: ${GREEN}Active & Running${NC}"
+    if [ "$PORT_BUSY" = true ]; then
+        echo -e " Port Status:    ${RED}Port $WUZAPI_PORT Busy${NC}"
+    else
+        echo -e " Port Status:    ${GREEN}Port $WUZAPI_PORT Available${NC}"
+    fi
 fi
 echo -e " Listening on:   ${YELLOW}http://0.0.0.0:${WUZAPI_PORT}${NC}"
 echo -e " Config folder:  ${YELLOW}$INSTALL_DIR${NC}"
 echo ""
-echo -e " ${BLUE}How to manage WuzAPI Service:${NC}"
-echo -e "   Start:        ${YELLOW}systemctl start wuzapi${NC}"
-echo -e "   Stop:         ${YELLOW}systemctl stop wuzapi${NC}"
-echo -e "   Logs:         ${YELLOW}journalctl -u wuzapi -f${NC}"
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
+    echo -e " ${BLUE}How to manage WuzAPI Service:${NC}"
+    echo -e "   Start:        ${YELLOW}systemctl start wuzapi${NC}"
+    echo -e "   Stop:         ${YELLOW}systemctl stop wuzapi${NC}"
+    echo -e "   Logs:         ${YELLOW}journalctl -u wuzapi -f${NC}"
+else
+    echo -e " ${BLUE}How to run WuzAPI manually:${NC}"
+    if [ "$OS" = "windows" ]; then
+        echo -e "   Run command:  ${YELLOW}cd $INSTALL_DIR && .\\wuzapi.exe${NC}"
+    else
+        echo -e "   Run command:  ${YELLOW}cd $INSTALL_DIR && ./wuzapi${NC}"
+    fi
+fi
 echo ""
 echo -e " ${BLUE}How to view database credentials and user tokens:${NC}"
-echo -e "   Run command:  ${GREEN}$INSTALL_DIR/wuzapi -show-credentials${NC}"
+if [ "$OS" = "windows" ]; then
+    echo -e "   Run command:  ${GREEN}cd $INSTALL_DIR && .\\wuzapi.exe -show-credentials${NC}"
+else
+    echo -e "   Run command:  ${GREEN}cd $INSTALL_DIR && ./wuzapi -show-credentials${NC}"
+fi
 echo -e "${BLUE}=================================================================${NC}"

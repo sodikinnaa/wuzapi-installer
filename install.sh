@@ -147,7 +147,7 @@ fi
 
 # Port check warning
 PORT_BUSY=false
-if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || grep -q "$(printf ':%04X' $WUZAPI_PORT)" /proc/net/tcp 2>/dev/null; do
+if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || grep -q "$(printf ':%04X' $WUZAPI_PORT)" /proc/net/tcp 2>/dev/null; then
     PORT_BUSY=true
     echo -e "${RED}Warning: Port $WUZAPI_PORT is already in use by another process!${NC}"
     echo -e "You might need to edit $ENV_FILE and change WUZAPI_PORT to a free port (e.g. 8086) then restart the service."

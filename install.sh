@@ -80,8 +80,8 @@ fi
 # Download Precompiled Binary
 echo -e "${YELLOW}Step 4: Downloading precompiled binary from GitHub...${NC}"
 
-# Stop systemd service if running (Linux only)
-if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
+# Stop systemd service if running (Linux only, systemd active)
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ] && [ -d /run/systemd/system ]; then
     if systemctl list-units --full -all | grep -Fq 'wuzapi.service'; then
         echo -e "${YELLOW}Stopping WuzAPI service to allow update...${NC}"
         systemctl stop wuzapi || true
@@ -153,8 +153,8 @@ if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || gr
     echo -e "You might need to edit $ENV_FILE and change WUZAPI_PORT to a free port (e.g. 8086) then restart the service."
 fi
 
-# Configure Systemd Service (Linux only, running as root)
-if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
+# Configure Systemd Service (Linux only, running as root, systemd active)
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ] && [ -d /run/systemd/system ]; then
     echo -e "${YELLOW}Step 6: Creating systemd service...${NC}"
     cat <<EOF > /etc/systemd/system/wuzapi.service
 [Unit]
@@ -181,13 +181,13 @@ EOF
     systemctl enable wuzapi
     systemctl restart wuzapi
 else
-    echo -e "${YELLOW}Step 6 & 7: Skipping systemd service configuration (only supported on Linux as root).${NC}"
+    echo -e "${YELLOW}Step 6 & 7: Skipping systemd service configuration (only supported on Linux with systemd active as root).${NC}"
 fi
 
 echo -e "${BLUE}=================================================================${NC}"
 echo -e "${GREEN}               WUZAPI INSTALLED SUCCESSFULLY!                    ${NC}"
 echo -e "${BLUE}=================================================================${NC}"
-if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ] && [ -d /run/systemd/system ]; then
     if [ "$PORT_BUSY" = true ]; then
         echo -e " Service status: ${RED}Failed to Bind (Port Busy)${NC}"
     else
@@ -203,7 +203,7 @@ fi
 echo -e " Listening on:   ${YELLOW}http://0.0.0.0:${WUZAPI_PORT}${NC}"
 echo -e " Config folder:  ${YELLOW}$INSTALL_DIR${NC}"
 echo ""
-if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ] && [ -d /run/systemd/system ]; then
     echo -e " ${BLUE}How to manage WuzAPI Service:${NC}"
     echo -e "   Start:        ${YELLOW}systemctl start wuzapi${NC}"
     echo -e "   Stop:         ${YELLOW}systemctl stop wuzapi${NC}"

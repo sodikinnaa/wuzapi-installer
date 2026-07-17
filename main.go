@@ -62,6 +62,7 @@ var (
 	versionFlag         = flag.Bool("version", false, "Display version information and exit")
 	mode                = flag.String("mode", "http", "Server mode: http or stdio")
 	dataDir             = flag.String("datadir", "", "Data directory for database and session files (defaults to executable directory)")
+	showCredentials     = flag.Bool("show-credentials", false, "Show WuzAPI admin token, database credentials, and registered user credentials")
 
 	globalHMACKeyEncrypted []byte
 
@@ -428,6 +429,11 @@ func main() {
 	}
 	exPath := filepath.Dir(ex)
 
+	if *showCredentials {
+		printCredentials(exPath)
+		os.Exit(0)
+	}
+
 	db, err := InitializeDatabase(exPath, *dataDir)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize database")
@@ -567,4 +573,81 @@ func startStdioMode(s *server) {
 		os.Exit(1)
 	}
 	log.Info().Msg("Stdio server exited properly")
+}
+
+func printCredentials(exPath string) {
+	config := getDatabaseConfig(exPath, *dataDir)
+
+	fmt.Println("==================================================================")
+	fmt.Println("                  WUZAPI CREDENTIALS & INFO                      ")
+	fmt.Println("==================================================================")
+	fmt.Println()
+	fmt.Println("[SERVER CONFIGURATION]")
+	fmt.Printf("  Port:        %s\n", *port)
+	fmt.Printf("  Address:     %s\n", *address)
+	fmt.Printf("  Admin Token: %s\n", *adminToken)
+	fmt.Printf("  Global Key:  %s\n", *globalEncryptionKey)
+	fmt.Println()
+
+	fmt.Println("[DATABASE CONFIGURATION]")
+	fmt.Printf("  DB Type:     %s\n", config.Type)
+	if config.Type == "postgres" {
+		fmt.Printf("  Host:        %s\n", config.Host)
+		fmt.Printf("  Port:        %s\n", config.Port)
+		fmt.Printf("  User:        %s\n", config.User)
+		fmt.Printf("  Password:    %s\n", config.Password)
+		fmt.Printf("  DB Name:     %s\n", config.Name)
+		fmt.Printf("  SSL Mode:    %s\n", config.SSLMode)
+	} else {
+		dbPath := filepath.Join(config.Path, "users.db")
+		fmt.Printf("  Path:        %s\n", dbPath)
+	}
+	fmt.Println()
+
+	// Initialize database to query users
+	db, err := InitializeDatabase(exPath, *dataDir)
+	if err != nil {
+		fmt.Printf("Error: Failed to connect to database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+	// Initialize the schema if not already initialized
+	if err = initializeSchema(db); err != nil {
+		fmt.Printf("Error: Failed to initialize schema: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Query users
+	type UserInfo struct {
+		ID        string `db:"id" json:"id"`
+		Name      string `db:"name" json:"name"`
+		Token     string `db:"token" json:"token"`
+		Connected int    `db:"connected" json:"connected"`
+		JID       string `db:"jid" json:"jid"`
+	}
+	var users []UserInfo
+	err = db.Select(&users, "SELECT id, name, token, connected, jid FROM users ORDER BY name ASC")
+	if err != nil {
+		fmt.Printf("Error: Failed to query users table: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("[REGISTERED USERS]")
+	if len(users) == 0 {
+		fmt.Println("  No registered users found.")
+	} else {
+		for i, u := range users {
+			status := "Disconnected"
+			if u.Connected == 1 {
+				status = "Connected"
+			}
+			fmt.Printf("  %d. Name (Username): %s\n", i+1, u.Name)
+			fmt.Printf("     Token (Password): %s\n", u.Token)
+			fmt.Printf("     User ID:          %s\n", u.ID)
+			fmt.Printf("     JID:              %s\n", u.JID)
+			fmt.Printf("     Status:           %s\n", status)
+			fmt.Println()
+		}
+	}
+	fmt.Println("==================================================================")
 }

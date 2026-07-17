@@ -1,6 +1,8 @@
 package main
 
 import (
+	"embed"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,6 +12,9 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/hlog"
 )
+
+//go:embed static
+var staticFS embed.FS
 
 type Middleware = alice.Constructor
 
@@ -168,5 +173,15 @@ func (s *server) routes() {
 
 	s.router.Handle("/newsletter/list", c.Then(s.ListNewsletter())).Methods("GET")
 
-	s.router.PathPrefix("/").Handler(http.FileServer(http.Dir(exPath + "/static/")))
+	// Check if local static directory exists (useful for development)
+	staticPath := filepath.Join(exPath, "static")
+	if stat, err := os.Stat(staticPath); err == nil && stat.IsDir() {
+		s.router.PathPrefix("/").Handler(http.FileServer(http.Dir(staticPath)))
+	} else {
+		subFS, err := fs.Sub(staticFS, "static")
+		if err != nil {
+			panic(err)
+		}
+		s.router.PathPrefix("/").Handler(http.FileServer(http.FS(subFS)))
+	}
 }

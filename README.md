@@ -65,6 +65,14 @@ go mod tidy
 go build .
 ```
 
+## Quick Installation (via Curl)
+
+You can install WuzAPI automatically on a Linux system (which installs Go if missing, compiles from source, sets up the directory structure, configures `.env`, and registers a systemd service) using the following command:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sodikinnaa/wuzapi-installer/main/install.sh | sudo bash
+```
+
 ## Homebrew installation
 
 To install `wuzapi` via [Homebrew](https://brew.sh) use:
@@ -86,9 +94,44 @@ you can use to alter behaviour
 * -osname : Connection OS Name in Whatsapp
 * -skipmedia : Skip downloading media from messages
 * -wadebug : enable whatsmeow debug, either INFO or DEBUG levels are suported
+* -show-credentials : show WuzAPI admin token, database credentials, and registered user credentials, then exit
 
 * -sslcertificate : SSL Certificate File
 * -sslprivatekey : SSL Private Key File
+
+## Viewing Credentials & User Info (CLI)
+
+You can view the active server configuration, database details, and registered user credentials (usernames and tokens) directly from the command line:
+
+```bash
+./wuzapi -show-credentials
+```
+
+Example output:
+```text
+==================================================================
+                  WUZAPI CREDENTIALS & INFO                      
+==================================================================
+
+[SERVER CONFIGURATION]
+  Port:        8080
+  Address:     0.0.0.0
+  Admin Token: 1234ABCD
+  Global Key:  your_32_byte_encryption_key_here
+
+[DATABASE CONFIGURATION]
+  DB Type:     sqlite
+  Path:        dbdata/users.db
+
+[REGISTERED USERS]
+  1. Name (Username): user1
+     Token (Password): s0meS3cr3tT0k3n
+     User ID:          9a7f3b8c2d1e0f4a
+     JID:              628123456789@s.whatsapp.net
+     Status:           Connected
+
+==================================================================
+```
 
 Example:
 

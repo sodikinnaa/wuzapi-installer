@@ -26,7 +26,7 @@ fi
 echo -e "${YELLOW}Step 1: Installing basic system dependencies...${NC}"
 if command -v apt-get &> /dev/null; then
     apt-get update -y
-    apt-get install -y git curl gcc make tr
+    apt-get install -y git curl gcc make
 elif command -v yum &> /dev/null; then
     yum install -y git curl gcc make
 else

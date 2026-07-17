@@ -81,7 +81,21 @@ echo -e "${GREEN}Binary downloaded and installed successfully to $INSTALL_DIR/wu
 # 6. Generate .env file
 echo -e "${YELLOW}Step 5: Configuring environment variables (.env)...${NC}"
 ENV_FILE="$INSTALL_DIR/.env"
-if [ ! -f "$ENV_FILE" ]; then
+
+if [ -f "$ENV_FILE" ]; then
+    WUZAPI_PORT=$(grep -E '^WUZAPI_PORT=' "$ENV_FILE" | cut -d= -f2 | tr -d ' \r\n')
+    if [ -z "$WUZAPI_PORT" ]; then
+        WUZAPI_PORT="8080"
+    fi
+    echo -e "Existing .env file found at $ENV_FILE. Configured port is $WUZAPI_PORT."
+else
+    echo "Finding a free port starting from 8080..."
+    WUZAPI_PORT=8080
+    while ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || grep -q "$(printf ':%04X' $WUZAPI_PORT)" /proc/net/tcp 2>/dev/null; do
+        WUZAPI_PORT=$((WUZAPI_PORT + 1))
+    done
+    echo -e "Selected free port: $WUZAPI_PORT"
+
     echo "Generating secure keys..."
     ADMIN_TOKEN=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32 || echo "AdminToken$(date +%s)")
     ENCRYPTION_KEY=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32 || echo "EncryptionKey32BytesLongSecret!!")
@@ -89,7 +103,7 @@ if [ ! -f "$ENV_FILE" ]; then
 
     cat <<EOF > "$ENV_FILE"
 # Server Configuration
-WUZAPI_PORT=8080
+WUZAPI_PORT=$WUZAPI_PORT
 WUZAPI_ADDRESS=0.0.0.0
 
 # WuzAPI Admin Token
@@ -106,8 +120,14 @@ SESSION_DEVICE_NAME=WuzAPI
 TZ=UTC
 EOF
     echo -e "${GREEN}Created new .env file at $ENV_FILE with auto-generated secure credentials.${NC}"
-else
-    echo -e "${BLUE}Existing .env file found at $ENV_FILE. Keeping it.${NC}"
+fi
+
+# Port check warning
+PORT_BUSY=false
+if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || grep -q "$(printf ':%04X' $WUZAPI_PORT)" /proc/net/tcp 2>/dev/null; then
+    PORT_BUSY=true
+    echo -e "${RED}Warning: Port $WUZAPI_PORT is already in use by another process!${NC}"
+    echo -e "You might need to edit $ENV_FILE and change WUZAPI_PORT to a free port (e.g. 8086) then restart the service."
 fi
 
 # 7. Configure Systemd Service
@@ -140,8 +160,12 @@ systemctl restart wuzapi
 echo -e "${BLUE}=================================================================${NC}"
 echo -e "${GREEN}               WUZAPI INSTALLED SUCCESSFULLY!                    ${NC}"
 echo -e "${BLUE}=================================================================${NC}"
-echo -e " Service status: ${GREEN}Active & Running${NC}"
-echo -e " Listening on:   ${YELLOW}http://0.0.0.0:8080${NC}"
+if [ "$PORT_BUSY" = true ]; then
+    echo -e " Service status: ${RED}Failed to Bind (Port Busy)${NC}"
+else
+    echo -e " Service status: ${GREEN}Active & Running${NC}"
+fi
+echo -e " Listening on:   ${YELLOW}http://0.0.0.0:${WUZAPI_PORT}${NC}"
 echo -e " Config folder:  ${YELLOW}$INSTALL_DIR${NC}"
 echo ""
 echo -e " ${BLUE}How to manage WuzAPI Service:${NC}"

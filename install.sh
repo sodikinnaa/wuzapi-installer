@@ -145,6 +145,11 @@ EOF
     echo -e "${GREEN}Created new .env file at $ENV_FILE with auto-generated secure credentials.${NC}"
 fi
 
+# Change ownership to the user who ran sudo (so they can run the binary without sudo)
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    chown -R "$SUDO_USER" "$INSTALL_DIR" || true
+fi
+
 # Port check warning
 PORT_BUSY=false
 if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || grep -q "$(printf ':%04X' $WUZAPI_PORT)" /proc/net/tcp 2>/dev/null; then

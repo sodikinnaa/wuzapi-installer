@@ -64,6 +64,12 @@ echo -e "${YELLOW}Step 4: Downloading precompiled binary from GitHub...${NC}"
 INSTALL_DIR="/usr/local/wuzapi"
 mkdir -p "$INSTALL_DIR"
 
+# Stop service if running to avoid "Text file busy" error during binary overwrite
+if systemctl list-units --full -all | grep -Fq 'wuzapi.service'; then
+    echo -e "${YELLOW}Stopping WuzAPI service to allow update...${NC}"
+    systemctl stop wuzapi || true
+fi
+
 BINARY_URL="https://github.com/sodikinnaa/wuzapi-installer/releases/download/${VERSION}/wuzapi-${VERSION}-${OS}-${GO_ARCH}"
 echo -e "Downloading from: $BINARY_URL"
 

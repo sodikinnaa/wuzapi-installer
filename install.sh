@@ -57,10 +57,10 @@ mkdir -p "$INSTALL_DIR"
 if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
     echo -e "${YELLOW}Step 2: Installing basic system dependencies...${NC}"
     if command -v apt-get &> /dev/null; then
-        apt-get update -y
-        apt-get install -y curl ca-certificates
+        apt-get update -y < /dev/null
+        apt-get install -y curl ca-certificates < /dev/null
     elif command -v yum &> /dev/null; then
-        yum install -y curl ca-certificates
+        yum install -y curl ca-certificates < /dev/null
     fi
 fi
 
@@ -68,7 +68,7 @@ fi
 echo -e "${YELLOW}Step 3: Determining latest release version...${NC}"
 VERSION=""
 # Try to get latest version from GitHub API
-VERSION=$(curl -s https://api.github.com/repos/sodikinnaa/wuzapi-installer/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
+VERSION=$(curl -s https://api.github.com/repos/sodikinnaa/wuzapi-installer/releases/latest < /dev/null | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
 
 if [ -z "$VERSION" ]; then
     VERSION="v1.1.2"
@@ -97,7 +97,7 @@ BINARY_URL="https://github.com/sodikinnaa/wuzapi-installer/releases/download/${V
 echo -e "Downloading from: $BINARY_URL"
 
 # Download binary
-curl -L -o "$INSTALL_DIR/wuzapi${EXE_EXT}" "$BINARY_URL"
+curl -L -o "$INSTALL_DIR/wuzapi${EXE_EXT}" "$BINARY_URL" < /dev/null
 chmod +x "$INSTALL_DIR/wuzapi${EXE_EXT}"
 echo -e "${GREEN}Binary downloaded and installed successfully to $INSTALL_DIR/wuzapi${EXE_EXT}.${NC}"
 

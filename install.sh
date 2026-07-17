@@ -26,75 +26,57 @@ fi
 echo -e "${YELLOW}Step 1: Installing basic system dependencies...${NC}"
 if command -v apt-get &> /dev/null; then
     apt-get update -y
-    apt-get install -y git curl gcc make
+    apt-get install -y curl ca-certificates
 elif command -v yum &> /dev/null; then
-    yum install -y git curl gcc make
+    yum install -y curl ca-certificates
 else
-    echo -e "${YELLOW}Warning: Unknown package manager. Please ensure git, curl, and gcc are installed.${NC}"
+    echo -e "${YELLOW}Warning: Please ensure curl and ca-certificates are installed.${NC}"
 fi
 
-# 3. Check / Install Go
-echo -e "${YELLOW}Step 2: Checking Go installation...${NC}"
-if ! command -v go &> /dev/null; then
-    echo -e "${YELLOW}Go is not installed. Installing Go...${NC}"
-    
-    # Detect Architecture
-    ARCH=$(uname -m)
-    if [ "$ARCH" = "x86_64" ]; then
-        GO_ARCH="amd64"
-    elif [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ]; then
-        GO_ARCH="arm64"
-    else
-        echo -e "${RED}Error: Unsupported architecture: $ARCH${NC}"
-        exit 1
-    fi
-
-    GO_VERSION="1.22.2"
-    echo -e "Downloading Go v${GO_VERSION} for linux-${GO_ARCH}..."
-    curl -OL "https://golang.org/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
-    
-    echo "Extracting Go to /usr/local..."
-    rm -rf /usr/local/go
-    tar -C /usr/local -xzf "go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
-    rm "go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
-    
-    # Export path
-    export PATH=$PATH:/usr/local/go/bin
-    if ! grep -q "/usr/local/go/bin" /etc/profile; then
-        echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
-    fi
-    echo -e "${GREEN}Go installed successfully at /usr/local/go.${NC}"
+# 3. Detect Architecture and OS
+echo -e "${YELLOW}Step 2: Detecting system architecture...${NC}"
+OS="linux" # Currently we only support linux via this installer script since it sets up systemd
+ARCH=$(uname -m)
+if [ "$ARCH" = "x86_64" ]; then
+    GO_ARCH="amd64"
+elif [ "$ARCH" = "aarch64" -o "$ARCH" = "arm64" ]; then
+    GO_ARCH="arm64"
 else
-    echo -e "${GREEN}Go is already installed: $(go version)${NC}"
+    echo -e "${RED}Error: Unsupported architecture: $ARCH${NC}"
+    exit 1
+fi
+echo -e "Detected platform: $OS-$GO_ARCH"
+
+# 4. Fetch Version from GitHub API
+echo -e "${YELLOW}Step 3: Determining latest release version...${NC}"
+# Try to get latest version from GitHub API
+VERSION=$(curl -s https://api.github.com/repos/sodikinnaa/wuzapi-installer/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
+
+if [ -z "$VERSION" ]; then
+    VERSION="v1.0.8"
+    echo -e "Using default fallback version: $VERSION"
+else
+    echo -e "Latest release version: $VERSION"
 fi
 
-# 4. Clone/Get WuzAPI repository if not in the workspace directory
-echo -e "${YELLOW}Step 3: Preparing WuzAPI source code...${NC}"
-TEMP_DIR="/tmp/wuzapi-build"
-rm -rf "$TEMP_DIR"
-echo -e "Cloning repository to temporary directory..."
-git clone https://github.com/sodikinnaa/wuzapi-installer.git "$TEMP_DIR"
-cd "$TEMP_DIR"
-
-# 5. Build Binary
-echo -e "${YELLOW}Step 4: Compiling WuzAPI (wrapping all technologies)...${NC}"
-export PATH=$PATH:/usr/local/go/bin
-go build -ldflags="-w -s" -o wuzapi .
-echo -e "${GREEN}WuzAPI compiled successfully.${NC}"
-
-# 6. Install Binary
-echo -e "${YELLOW}Step 5: Installing binary and assets...${NC}"
+# 5. Download Precompiled Binary
+echo -e "${YELLOW}Step 4: Downloading precompiled binary from GitHub...${NC}"
 INSTALL_DIR="/usr/local/wuzapi"
 mkdir -p "$INSTALL_DIR"
-mv wuzapi "$INSTALL_DIR/wuzapi"
-chmod +x "$INSTALL_DIR/wuzapi"
 
-# 7. Generate .env file
-echo -e "${YELLOW}Step 6: Configuring environment variables (.env)...${NC}"
+BINARY_URL="https://github.com/sodikinnaa/wuzapi-installer/releases/download/${VERSION}/wuzapi-${VERSION}-${OS}-${GO_ARCH}"
+echo -e "Downloading from: $BINARY_URL"
+
+# Download binary
+curl -L -o "$INSTALL_DIR/wuzapi" "$BINARY_URL"
+chmod +x "$INSTALL_DIR/wuzapi"
+echo -e "${GREEN}Binary downloaded and installed successfully to $INSTALL_DIR/wuzapi.${NC}"
+
+# 6. Generate .env file
+echo -e "${YELLOW}Step 5: Configuring environment variables (.env)...${NC}"
 ENV_FILE="$INSTALL_DIR/.env"
 if [ ! -f "$ENV_FILE" ]; then
     echo "Generating secure keys..."
-    # Fallback random string generation if openssl or urandom is restricted
     ADMIN_TOKEN=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32 || echo "AdminToken$(date +%s)")
     ENCRYPTION_KEY=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32 || echo "EncryptionKey32BytesLongSecret!!")
     HMAC_KEY=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 32 || echo "HmacSignatureKeyMinimum32BytesLong")
@@ -122,8 +104,8 @@ else
     echo -e "${BLUE}Existing .env file found at $ENV_FILE. Keeping it.${NC}"
 fi
 
-# 8. Configure Systemd Service
-echo -e "${YELLOW}Step 7: Creating systemd service...${NC}"
+# 7. Configure Systemd Service
+echo -e "${YELLOW}Step 6: Creating systemd service...${NC}"
 cat <<EOF > /etc/systemd/system/wuzapi.service
 [Unit]
 Description=Wuzapi Service
@@ -144,14 +126,10 @@ WantedBy=multi-user.target
 EOF
 
 # Reload and Start Service
-echo -e "${YELLOW}Step 8: Starting WuzAPI service...${NC}"
+echo -e "${YELLOW}Step 7: Starting WuzAPI service...${NC}"
 systemctl daemon-reload
 systemctl enable wuzapi
 systemctl restart wuzapi
-
-# Clean up
-cd /
-rm -rf "$TEMP_DIR"
 
 echo -e "${BLUE}=================================================================${NC}"
 echo -e "${GREEN}               WUZAPI INSTALLED SUCCESSFULLY!                    ${NC}"

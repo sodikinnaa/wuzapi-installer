@@ -16,7 +16,7 @@ echo -e "${BLUE}================================================================
 echo -e "${BLUE}                    WUZAPI INSTALLER SCRIPT                      ${NC}"
 echo -e "${BLUE}=================================================================${NC}"
 
-# 1. Detect System OS and Architecture
+# Detect System OS and Architecture
 echo -e "${YELLOW}Step 1: Detecting system OS and architecture...${NC}"
 OS_LOWER=$(uname -s | tr '[:upper:]' '[:lower:]')
 OS="linux"
@@ -53,7 +53,7 @@ if [ "$OS" = "windows" ] || [ "$EUID" -ne 0 ]; then
 fi
 mkdir -p "$INSTALL_DIR"
 
-# 2. Install basic dependencies (Linux only)
+# Install basic dependencies (Linux only)
 if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
     echo -e "${YELLOW}Step 2: Installing basic system dependencies...${NC}"
     if command -v apt-get &> /dev/null; then
@@ -64,7 +64,7 @@ if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
     fi
 fi
 
-# 3. Fetch Version from GitHub API
+# Fetch Version from GitHub API
 echo -e "${YELLOW}Step 3: Determining latest release version...${NC}"
 VERSION=""
 # Try to get latest version from GitHub API
@@ -77,7 +77,7 @@ else
     echo -e "Latest release version: $VERSION"
 fi
 
-# 4. Download Precompiled Binary
+# Download Precompiled Binary
 echo -e "${YELLOW}Step 4: Downloading precompiled binary from GitHub...${NC}"
 
 # Stop systemd service if running (Linux only)
@@ -101,7 +101,7 @@ curl -L -o "$INSTALL_DIR/wuzapi${EXE_EXT}" "$BINARY_URL"
 chmod +x "$INSTALL_DIR/wuzapi${EXE_EXT}"
 echo -e "${GREEN}Binary downloaded and installed successfully to $INSTALL_DIR/wuzapi${EXE_EXT}.${NC}"
 
-# 5. Configure environment variables (.env)
+# Configure environment variables (.env)
 echo -e "${YELLOW}Step 5: Configuring environment variables (.env)...${NC}"
 ENV_FILE="$INSTALL_DIR/.env"
 
@@ -153,7 +153,7 @@ if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || gr
     echo -e "You might need to edit $ENV_FILE and change WUZAPI_PORT to a free port (e.g. 8086) then restart the service."
 fi
 
-# 6. Configure Systemd Service (Linux only, running as root)
+# Configure Systemd Service (Linux only, running as root)
 if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ]; then
     echo -e "${YELLOW}Step 6: Creating systemd service...${NC}"
     cat <<EOF > /etc/systemd/system/wuzapi.service

@@ -83,7 +83,7 @@ var (
 
 var privateIPBlocks []*net.IPNet
 
-const version = "1.0.9"
+const version = "1.1.0"
 
 // killchannel maps a userID to its session goroutine's kill channel. It is
 // accessed from HTTP request goroutines (Connect/Disconnect/logout/delete) and
@@ -225,7 +225,17 @@ func main() {
 		privateIPBlocks = append(privateIPBlocks, block)
 	}
 
-	err := godotenv.Load()
+	ex, err := os.Executable()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to get executable path")
+		panic(err)
+	}
+	exPath := filepath.Dir(ex)
+
+	err = godotenv.Load()
+	if err != nil {
+		err = godotenv.Load(filepath.Join(exPath, ".env"))
+	}
 	if err != nil {
 		log.Warn().Err(err).Msg("It was not possible to load the .env file (it may not exist).")
 	}
@@ -422,12 +432,7 @@ func main() {
 
 	InitRabbitMQ()
 
-	ex, err := os.Executable()
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get executable path")
-		panic(err)
-	}
-	exPath := filepath.Dir(ex)
+	// exPath is already detected at the start of main
 
 	if *showCredentials {
 		printCredentials(exPath)

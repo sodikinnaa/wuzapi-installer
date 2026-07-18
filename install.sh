@@ -186,7 +186,7 @@ EOF
     systemctl enable wuzapi
     systemctl restart wuzapi
 else
-    echo -e "${YELLOW}Step 6 & 7: Skipping systemd service configuration (only supported on Linux with systemd active as root).${NC}"
+    echo -e "${BLUE}[INFO] Systemd is not active in this environment (e.g. Cloud Shell/Docker). Skipping systemd service setup. You can run WuzAPI manually.${NC}"
 fi
 
 echo -e "${BLUE}=================================================================${NC}"

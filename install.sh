@@ -164,6 +164,33 @@ if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || gr
     echo -e "You might need to edit $ENV_FILE and change WUZAPI_PORT to a free port (e.g. 8086) then restart the service."
 fi
 
+# Configure Systemd Service (Linux only, running as root, systemd active)
+if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ] && [ -d /run/systemd/system ]; then
+    echo -e "${YELLOW}Step 6: Creating systemd service...${NC}"
+    cat <<EOF > /etc/systemd/system/wuzapi.service
+[Unit]
+Description=Wuzapi Service
+After=network-online.target
+Wants=network-online.target systemd-networkd-wait-online.service
+
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+Restart=on-failure
+RestartSec=5s
+WorkingDirectory=$INSTALL_DIR
+ExecStart=$INSTALL_DIR/wuzapi
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Reload and Start Service
+    echo -e "${YELLOW}Step 7: Starting WuzAPI service...${NC}"
+    systemctl daemon-reload
+    systemctl enable wuzapi
+    systemctl restart wuzapi
 else
     echo -e "${BLUE}[INFO] Systemd is not active in this environment (e.g. Cloud Shell/Docker). Skipping systemd service setup.${NC}"
     echo -e "${YELLOW}Starting WuzAPI automatically in the background...${NC}"

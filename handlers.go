@@ -126,7 +126,10 @@ func (s *server) GetHealth() http.HandlerFunc {
 
 func (s *server) authadmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
+		token := r.Header.Get("admin-token")
+		if token == "" {
+			token = r.Header.Get("Authorization")
+		}
 		tokenHash := sha256.Sum256([]byte(token))
 		adminHash := sha256.Sum256([]byte(*adminToken))
 		// Constant-time compare to avoid timing-attack leak of admin token bytes.

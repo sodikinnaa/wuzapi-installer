@@ -392,21 +392,21 @@ document.addEventListener('DOMContentLoaded', function() {
       name: {
         identifier: 'name',
         rules: [{
-          type: 'empty',
+          type: 'notEmpty',
           prompt: 'Please enter a name for the instance'
         }]
       },
       token: {
         identifier: 'token',
         rules: [{
-          type: 'empty',
+          type: 'notEmpty',
           prompt: 'Please enter an authentication token for the instance'
         }]
       },
       events: {
         identifier: 'events',
         rules: [{
-          type: 'empty',
+          type: 'notEmpty',
           prompt: 'Please select at least one event'
         }]
       },
@@ -516,7 +516,7 @@ async function addInstance(data) {
   console.log("Add Instance...");
   const admintoken = getLocalStorageItem('admintoken');
   const myHeaders = new Headers();
-  myHeaders.append('authorization', admintoken);
+  myHeaders.append('admin-token', admintoken);
   myHeaders.append('Content-Type', 'application/json');
 
   // Build proxy configuration
@@ -747,7 +747,7 @@ async function performDelete(id) {
   console.log('Deleting instance with ID:', id);
   const admintoken = getLocalStorageItem('admintoken');
   const myHeaders = new Headers();
-  myHeaders.append('authorization', admintoken);
+  myHeaders.append('admin-token', admintoken);
   myHeaders.append('Content-Type', 'application/json');
   res = await fetch(baseUrl + "/admin/users/"+id+"/full", {
     method: "DELETE",
@@ -971,7 +971,7 @@ async function getUsers() {
   console.log("Get users...");
   const admintoken = getLocalStorageItem('admintoken');
   const myHeaders = new Headers();
-  myHeaders.append('authorization', admintoken);
+  myHeaders.append('admin-token', admintoken);
   myHeaders.append('Content-Type', 'application/json');
   res = await fetch(baseUrl + "/admin/users", {
     method: "GET",

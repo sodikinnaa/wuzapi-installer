@@ -110,7 +110,11 @@ if [ -f "$ENV_FILE" ]; then
     if [ -z "$WUZAPI_PORT" ]; then
         WUZAPI_PORT="8080"
     fi
+    ADMIN_TOKEN=$(grep -E '^WUZAPI_ADMIN_TOKEN=' "$ENV_FILE" | cut -d= -f2 | tr -d ' \r\n')
+    ENCRYPTION_KEY=$(grep -E '^WUZAPI_GLOBAL_ENCRYPTION_KEY=' "$ENV_FILE" | cut -d= -f2 | tr -d ' \r\n')
     echo -e "Existing .env file found at $ENV_FILE. Configured port is $WUZAPI_PORT."
+    echo -e "  Admin Token:  ${GREEN}$ADMIN_TOKEN${NC}"
+    echo -e "  Global Key:   ${GREEN}$ENCRYPTION_KEY${NC}"
 else
     echo "Finding a free port starting from 8080..."
     WUZAPI_PORT=8080
@@ -143,6 +147,8 @@ SESSION_DEVICE_NAME=WuzAPI
 TZ=UTC
 EOF
     echo -e "${GREEN}Created new .env file at $ENV_FILE with auto-generated secure credentials.${NC}"
+    echo -e "  Admin Token:  ${GREEN}$ADMIN_TOKEN${NC}"
+    echo -e "  Global Key:   ${GREEN}$ENCRYPTION_KEY${NC}"
 fi
 
 # Change ownership to the user who ran sudo (so they can run the binary without sudo)
@@ -158,35 +164,29 @@ if ss -lptn "sport = :$WUZAPI_PORT" 2>/dev/null | grep -q ":$WUZAPI_PORT " || gr
     echo -e "You might need to edit $ENV_FILE and change WUZAPI_PORT to a free port (e.g. 8086) then restart the service."
 fi
 
-# Configure Systemd Service (Linux only, running as root, systemd active)
-if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ] && [ -d /run/systemd/system ]; then
-    echo -e "${YELLOW}Step 6: Creating systemd service...${NC}"
-    cat <<EOF > /etc/systemd/system/wuzapi.service
-[Unit]
-Description=Wuzapi Service
-After=network-online.target
-Wants=network-online.target systemd-networkd-wait-online.service
-
-StartLimitIntervalSec=500
-StartLimitBurst=5
-
-[Service]
-Restart=on-failure
-RestartSec=5s
-WorkingDirectory=$INSTALL_DIR
-ExecStart=$INSTALL_DIR/wuzapi
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    # Reload and Start Service
-    echo -e "${YELLOW}Step 7: Starting WuzAPI service...${NC}"
-    systemctl daemon-reload
-    systemctl enable wuzapi
-    systemctl restart wuzapi
 else
-    echo -e "${BLUE}[INFO] Systemd is not active in this environment (e.g. Cloud Shell/Docker). Skipping systemd service setup. You can run WuzAPI manually.${NC}"
+    echo -e "${BLUE}[INFO] Systemd is not active in this environment (e.g. Cloud Shell/Docker). Skipping systemd service setup.${NC}"
+    echo -e "${YELLOW}Starting WuzAPI automatically in the background...${NC}"
+    
+    # Kill any existing manually started wuzapi instance to update it
+    if [ "$OS" = "windows" ]; then
+        taskkill //F //IM wuzapi.exe 2>/dev/null || true
+    else
+        pkill -f "$INSTALL_DIR/wuzapi" || pkill wuzapi || true
+    fi
+    
+    # Run in background redirecting output to wuzapi.log
+    if [ "$OS" = "windows" ]; then
+        nohup "$INSTALL_DIR/wuzapi.exe" > "$INSTALL_DIR/wuzapi.log" 2>&1 &
+    else
+        if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+            # Run as the SUDO_USER so that database files are created with correct user ownership
+            sudo -u "$SUDO_USER" nohup "$INSTALL_DIR/wuzapi" > "$INSTALL_DIR/wuzapi.log" 2>&1 &
+        else
+            nohup "$INSTALL_DIR/wuzapi" > "$INSTALL_DIR/wuzapi.log" 2>&1 &
+        fi
+    fi
+    sleep 2 # Let it start up
 fi
 
 echo -e "${BLUE}=================================================================${NC}"
@@ -199,10 +199,21 @@ if [ "$OS" = "linux" ] && [ "$EUID" -eq 0 ] && [ -d /run/systemd/system ]; then
         echo -e " Service status: ${GREEN}Active & Running (Systemd)${NC}"
     fi
 else
-    if [ "$PORT_BUSY" = true ]; then
-        echo -e " Port Status:    ${RED}Port $WUZAPI_PORT Busy${NC}"
+    RUNNING=false
+    if [ "$OS" = "windows" ]; then
+        tasklist | grep -q "wuzapi.exe" && RUNNING=true
     else
-        echo -e " Port Status:    ${GREEN}Port $WUZAPI_PORT Available${NC}"
+        (pgrep -f "$INSTALL_DIR/wuzapi" >/dev/null || pgrep wuzapi >/dev/null) && RUNNING=true
+    fi
+
+    if [ "$RUNNING" = true ]; then
+        echo -e " Service status: ${GREEN}Active & Running (Background Process)${NC}"
+    else
+        if [ "$PORT_BUSY" = true ]; then
+            echo -e " Service status: ${RED}Failed to Bind (Port Busy)${NC}"
+        else
+            echo -e " Service status: ${RED}Failed to Start (Check $INSTALL_DIR/wuzapi.log)${NC}"
+        fi
     fi
 fi
 echo -e " Listening on:   ${YELLOW}http://0.0.0.0:${WUZAPI_PORT}${NC}"
